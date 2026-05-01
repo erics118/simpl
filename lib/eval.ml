@@ -4,8 +4,29 @@ type error = string
 
 let ( let* ) = Result.bind
 
-(** [subst e v x] is [e{v/x}]. *)
-let subst _ _ _ = failwith "See next section"
+(** [subst e v x] is [e{v/x}]. no errors are possible, so no monads *)
+let rec subst e v x =
+  match e with
+  | Var y ->
+      (* if same, then use the value of x, otherwise use the value of y *)
+      if x = y then v else e
+  (* values, no substitution can be done *)
+  | Bool _ -> e
+  | Int _ -> e
+  | Binop (bop, e1, e2) ->
+      (* just substitute into both sides of bop *)
+      Binop (bop, subst e1 v x, subst e2 v x)
+  | Let (y, e1, e2) ->
+      let e1 = subst e1 v x in
+      if x = y then
+        (* x is shadowed by y, so x is not free in e2 *)
+        Let (y, e1, e2)
+      else
+        (* no shadowing, so re-bind inside *)
+        Let (y, e1, subst e2 v x)
+  | If (e1, e2, e3) ->
+      (* no shadowing, just substitute everywhere *)
+      If (subst e1 v x, subst e2 v x, subst e3 v x)
 
 (** [eval_bop bop v1 v2] applies [bop] to values [v1] and [v2]. *)
 let eval_bop bop e1 e2 =

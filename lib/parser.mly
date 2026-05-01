@@ -25,7 +25,7 @@ prog:
   | e = expr EOF { e }
 
 expr:
-  | IF cond = expr THEN e1 = expr ELSE e2 = expr    { If (cond, e1, e2) }
+  | IF e1 = expr THEN e2 = expr ELSE e3 = expr    { If (e1, e2, e3) }
   | LET x = ID EQ e1 = expr IN e2 = expr            { Let (x, e1, e2) }
   | e1 = expr EQ e2 = expr                          { Binop (Eq, e1, e2) }
   | e1 = expr NEQ e2 = expr                         { Binop (Neq, e1, e2) }
