@@ -27,8 +27,14 @@ let rec subst e v x =
   | If (e1, e2, e3) ->
       (* no shadowing, just substitute everywhere *)
       If (subst e1 v x, subst e2 v x, subst e3 v x)
-  | Fun (y, e) -> failwith "todo"
-  | App (e1, e2) -> failwith "todo"
+  | Fun (y, e) ->
+      if x = y then
+        (* if shadowing *)
+        Fun (y, e)
+      else
+        (* no shadowing, just substitute *)
+        Fun (y, subst e v x)
+  | App (e1, e2) -> App (subst e1 v x, subst e2 v x)
 
 (** [eval_bop bop v1 v2] applies [bop] to values [v1] and [v2]. *)
 let eval_bop bop e1 e2 =
@@ -68,5 +74,12 @@ let rec eval : expr -> (expr, error) result = function
       | Bool false -> eval e3
       | _ -> Error "Guard of if must have type bool"
     end
-  | Fun (y, e) -> failwith "todo"
-  | App (e1, e2) -> failwith "todo"
+  (* functions are values *)
+  | Fun _ as v -> Ok v
+  | App (e1, e2) -> begin
+      let* e1 = eval e1 in
+      let* e2 = eval e2 in
+      match e1 with
+      | Fun (y, body) -> eval (subst body e2 y)
+      | _ -> failwith "lhs of app must be function"
+    end
