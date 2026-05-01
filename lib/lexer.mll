@@ -16,6 +16,8 @@ rule read =
   | "if"      { IF }
   | "then"    { THEN }
   | "else"    { ELSE }
+  | "fun"     { FUN }
+  | "->"      { ARROW }
   | int       { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | "true"    { BOOL true }
   | "false"   { BOOL false }
