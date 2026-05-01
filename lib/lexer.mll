@@ -4,21 +4,31 @@ open Parser
 
 let white = [' ' '\t' '\n']+
 let digit = ['0'-'9']
-let int = '-'? digit+
+let int = digit+
 let letter = ['a'-'z' 'A'-'Z']
 let id = letter+
 
 rule read =
   parse
-  | white   { read lexbuf }
-  | "let"   { LET }
-  | "in"    { IN }
-  | int     { INT (int_of_string (Lexing.lexeme lexbuf)) }
-  | id      { ID (Lexing.lexeme lexbuf) }
-  | "="     { EQ }
-  | "+"     { PLUS }
-  | "-"     { MINUS }
-  | "*"     { TIMES }
-  | "("     { LPAREN }
-  | ")"     { RPAREN }
-  | eof     { EOF }
+  | white     { read lexbuf }
+  | "let"     { LET }
+  | "in"      { IN }
+  | "if"      { IF }
+  | "then"    { THEN }
+  | "else"    { ELSE }
+  | int       { INT (int_of_string (Lexing.lexeme lexbuf)) }
+  | "true"    { BOOL true }
+  | "false"   { BOOL false }
+  | id        { ID (Lexing.lexeme lexbuf) }
+  | "="       { EQ }
+  | "<>"      { NEQ }
+  | "<"       { LT }
+  | "<="      { LEQ }
+  | ">"       { GT }
+  | ">="      { GEQ }
+  | "+"       { PLUS }
+  | "-"       { MINUS }
+  | "*"       { TIMES }
+  | "("       { LPAREN }
+  | ")"       { RPAREN }
+  | eof       { EOF }
