@@ -1,85 +1,71 @@
 open Ast
 
-type error = string
-
 let ( let* ) = Result.bind
 
-(** [subst e v x] is [e{v/x}]. no errors are possible, so no monads *)
-let rec subst e v x =
-  match e with
-  | Var y ->
-      (* if same, then use the value of x, otherwise use the value of y *)
-      if x = y then v else e
-  (* values, no substitution can be done *)
-  | Bool _ -> e
-  | Int _ -> e
-  | Binop (bop, e1, e2) ->
-      (* just substitute into both sides of bop *)
-      Binop (bop, subst e1 v x, subst e2 v x)
-  | Let (y, e1, e2) ->
-      let e1 = subst e1 v x in
-      if x = y then
-        (* x is shadowed by y, so x is not free in e2 *)
-        Let (y, e1, e2)
-      else
-        (* no shadowing, so re-bind inside *)
-        Let (y, e1, subst e2 v x)
-  | If (e1, e2, e3) ->
-      (* no shadowing, just substitute everywhere *)
-      If (subst e1 v x, subst e2 v x, subst e3 v x)
-  | Fun (y, e) ->
-      if x = y then
-        (* if shadowing *)
-        Fun (y, e)
-      else
-        (* no shadowing, just substitute *)
-        Fun (y, subst e v x)
-  | App (e1, e2) -> App (subst e1 v x, subst e2 v x)
+module Env = Map.Make (String)
 
-(** [eval_bop bop v1 v2] applies [bop] to values [v1] and [v2]. *)
-let eval_bop bop e1 e2 =
-  match (bop, e1, e2) with
-  (* arithmetic *)
-  | Add, Int a, Int b -> Ok (Int (a + b))
-  | Sub, Int a, Int b -> Ok (Int (a - b))
-  | Mul, Int a, Int b -> Ok (Int (a * b))
-  (* int equality *)
-  | Eq, Int a, Int b -> Ok (Bool (a = b))
-  | Neq, Int a, Int b -> Ok (Bool (a <> b))
-  (* int comparison *)
-  | Lt, Int a, Int b -> Ok (Bool (a < b))
-  | Leq, Int a, Int b -> Ok (Bool (a <= b))
-  | Gt, Int a, Int b -> Ok (Bool (a > b))
-  | Geq, Int a, Int b -> Ok (Bool (a >= b))
-  (* equality of bools *)
-  | Eq, Bool a, Bool b -> Ok (Bool (a = b))
-  | Neq, Bool a, Bool b -> Ok (Bool (a <> b))
-  | _ -> Error "Operator and operand type mismatch"
+let empty_env = Env.empty
+
+type env = value Env.t
+
+and value =
+  | VInt of int
+  | VBool of bool
+  | VFun of string * expr * env  (** function name, body, closure env *)
 
 (** [eval e] is the [e ==> v] relation. *)
-let rec eval : expr -> (expr, error) result = function
-  | (Int _ | Bool _) as v -> Ok v
-  | Var _ -> Error "Unbound variable"
-  | Binop (bop, e1, e2) ->
-      let* e1 = eval e1 in
-      let* e2 = eval e2 in
-      eval_bop bop e1 e2
-  | Let (x, e1, e2) ->
-      let* e1 = eval e1 in
-      eval (subst e2 e1 x)
-  | If (e1, e2, e3) -> begin
-      let* e1 = eval e1 in
-      match e1 with
-      | Bool true -> eval e2
-      | Bool false -> eval e3
-      | _ -> Error "Guard of if must have type bool"
-    end
-  (* functions are values *)
-  | Fun _ as v -> Ok v
-  | App (e1, e2) -> begin
-      let* e1 = eval e1 in
-      let* e2 = eval e2 in
-      match e1 with
-      | Fun (y, body) -> eval (subst body e2 y)
-      | _ -> failwith "lhs of app must be function"
-    end
+let rec eval env expr =
+  match expr with
+  | Int v -> Ok (VInt v)
+  | Bool v -> Ok (VBool v)
+  | Fun (f, e) -> Ok (VFun (f, e, env))
+  | Var x -> eval_var env x
+  | Binop (bop, e1, e2) -> eval_bop env bop e1 e2
+  | Let (x, e1, e2) -> eval_let env x e1 e2
+  | If (e1, e2, e3) -> eval_if env e1 e2 e3
+  | App (e1, e2) -> eval_app env e1 e2
+
+and eval_var env x =
+  try Ok (Env.find x env) with Not_found -> Error "unbound var"
+
+and eval_let env x e1 e2 =
+  let* v1 = eval env e1 in
+  let env = Env.add x v1 env in
+  eval env e2
+
+and eval_if env e1 e2 e3 =
+  let* v1 = eval env e1 in
+  match v1 with
+  | VBool true -> eval env e2
+  | VBool false -> eval env e3
+  | _ -> Error "Guard of if must have type bool"
+
+and eval_app env e1 e2 =
+  begin
+    let* v1 = eval env e1 in
+    let* v2 = eval env e2 in
+    match v1 with
+    | VFun (y, body, closure_env) -> eval (Env.add y v2 closure_env) body
+    | _ -> failwith "lhs of app must be function"
+  end
+
+and eval_bop env bop e1 e2 =
+  let* e1 = eval env e1 in
+  let* e2 = eval env e2 in
+  match (bop, e1, e2) with
+  (* arithmetic *)
+  | Add, VInt a, VInt b -> Ok (VInt (a + b))
+  | Sub, VInt a, VInt b -> Ok (VInt (a - b))
+  | Mul, VInt a, VInt b -> Ok (VInt (a * b))
+  (* int equality *)
+  | Eq, VInt a, VInt b -> Ok (VBool (a = b))
+  | Neq, VInt a, VInt b -> Ok (VBool (a <> b))
+  (* int comparison *)
+  | Lt, VInt a, VInt b -> Ok (VBool (a < b))
+  | Leq, VInt a, VInt b -> Ok (VBool (a <= b))
+  | Gt, VInt a, VInt b -> Ok (VBool (a > b))
+  | Geq, VInt a, VInt b -> Ok (VBool (a >= b))
+  (* equality of bools *)
+  | Eq, VBool a, VBool b -> Ok (VBool (a = b))
+  | Neq, VBool a, VBool b -> Ok (VBool (a <> b))
+  | _ -> Error "Operator and operand type mismatch"
