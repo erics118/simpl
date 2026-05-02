@@ -6,6 +6,7 @@
 %token <string> ID
 %token <bool> BOOL
 %token LET IN
+%token FST SND LEFT RIGHT MATCH WITH COMMA PIPE
 %token EQ NEQ LT LEQ GT GEQ
 %token PLUS MINUS TIMES
 %token FUN ARROW
@@ -24,6 +25,12 @@ expr:
   | FUN x = ID ARROW e = expr                          { Fun (x, e) }
   | IF e1 = expr THEN e2 = expr ELSE e3 = expr         { If (e1, e2, e3) }
   | LET x = ID EQ e1 = expr IN e2 = expr               { Let (x, e1, e2) }
+  | MATCH e = expr WITH
+    PIPE LEFT x1 = ID ARROW e1 = expr
+    PIPE RIGHT x2 = ID ARROW e2 = expr
+    { Match (e, x1, e1, x2, e2) }
+  | LEFT e = expr_atom                                 { Left e }
+  | RIGHT e = expr_atom                                { Right e }
   | e = expr_cmp                                       { e }
 
 expr_cmp:
@@ -46,10 +53,13 @@ expr_mul:
 
 expr_app:
   | e1 = expr_app e2 = expr_atom      { App (e1, e2) }
+  | FST e = expr_atom                 { Fst e }
+  | SND e = expr_atom                 { Snd e }
   | e = expr_atom                     { e }
 
 expr_atom:
   | n = INT                           { Int n }
   | b = BOOL                          { Bool b }
   | x = ID                            { Var x }
-  | LPAREN e = expr RPAREN            { e }
+  | LPAREN e1 = expr COMMA e2 = expr RPAREN { Pair (e1, e2) }
+  | LPAREN e = expr RPAREN                  { e }

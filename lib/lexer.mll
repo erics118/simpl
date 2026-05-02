@@ -21,6 +21,14 @@ rule read =
   | int       { INT (int_of_string (Lexing.lexeme lexbuf)) }
   | "true"    { BOOL true }
   | "false"   { BOOL false }
+  | "fst"     { FST }
+  | "snd"     { SND }
+  | "Left"    { LEFT }
+  | "Right"   { RIGHT }
+  | "match"   { MATCH }
+  | "with"    { WITH }
+  | ","       { COMMA }
+  | "|"       { PIPE }  
   | id        { ID (Lexing.lexeme lexbuf) }
   | "="       { EQ }
   | "<>"      { NEQ }

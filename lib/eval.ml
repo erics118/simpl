@@ -12,6 +12,9 @@ and value =
   | VInt of int
   | VBool of bool
   | VFun of string * expr * env  (** function name, body, closure env *)
+  | VPair of value * value
+  | VLeft of value
+  | VRight of value
 
 (** [eval e] is the [e ==> v] relation. *)
 let rec eval env expr =
@@ -24,6 +27,39 @@ let rec eval env expr =
   | Let (x, e1, e2) -> eval_let env x e1 e2
   | If (e1, e2, e3) -> eval_if env e1 e2 e3
   | App (e1, e2) -> eval_app env e1 e2
+  | Pair (e1, e2) ->
+      let* v1 = eval env e1 in
+      let* v2 = eval env e2 in
+      Ok (VPair (v1, v2))
+  | Fst e -> begin
+      let* v = eval env e in
+      match v with
+      | VPair (v1, _) -> Ok v1
+      | _ -> failwith "bad"
+    end
+  | Snd e -> begin
+      let* v = eval env e in
+      match v with
+      | VPair (_, v2) -> Ok v2
+      | _ -> failwith "bad"
+    end
+  | Left e ->
+      let* v = eval env e in
+      Ok (VLeft v)
+  | Right e ->
+      let* v = eval env e in
+      Ok (VRight v)
+  | Match (e, x1, e1, x2, e2) -> begin
+      let* v = eval env e in
+      match v with
+      | VLeft v1 ->
+          let env = Env.add x1 v1 env in
+          eval env e1
+      | VRight v2 ->
+          let env = Env.add x2 v2 env in
+          eval env e2
+      | _ -> Error "match expects Left or Right"
+    end
 
 and eval_var env x =
   try Ok (Env.find x env) with Not_found -> Error "unbound var"
