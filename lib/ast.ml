@@ -1,3 +1,9 @@
+type typ =
+  | TInt
+  | TBool
+  | TFunc of typ * typ (* input type, output type *)
+  | TPair of typ * typ
+
 type bop =
   | Add
   | Sub
@@ -13,10 +19,10 @@ type expr =
   | Int of int
   | Bool of bool
   | Var of string
-  | Binop of bop * expr * expr
-  | Let of string * expr * expr
-  | If of expr * expr * expr
-  | Fun of string * expr
+  | Binop of bop * expr * expr (* e1 bop e2 *)
+  | Let of string * typ * expr * expr  (** let x : t = e1 in e2 *)
+  | If of expr * expr * expr (* if e1 then e2 else e3 *)
+  | Fun of string * typ * expr (* fun x : int -> e *)
   | App of expr * expr
   | Pair of expr * expr
   | Fst of expr

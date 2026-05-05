@@ -1,11 +1,13 @@
 %{
   open Ast
+  open Typechecker
 %}
 
 %token <int> INT
 %token <string> ID
 %token <bool> BOOL
-%token LET IN
+%token TINT TBOOL
+%token LET COLON IN
 %token FST SND LEFT RIGHT MATCH WITH COMMA PIPE
 %token EQ NEQ LT LEQ GT GEQ
 %token PLUS MINUS TIMES
@@ -22,9 +24,9 @@ prog:
   | e = expr EOF { e }
 
 expr:
-  | FUN x = ID ARROW e = expr                          { Fun (x, e) }
+  | FUN x = ID COLON t = typ ARROW e = expr            { Fun (x, t, e) }
   | IF e1 = expr THEN e2 = expr ELSE e3 = expr         { If (e1, e2, e3) }
-  | LET x = ID EQ e1 = expr IN e2 = expr               { Let (x, e1, e2) }
+  | LET x = ID COLON t = typ EQ e1 = expr IN e2 = expr { Let (x, t, e1, e2) }
   | MATCH e = expr WITH
     PIPE LEFT x1 = ID ARROW e1 = expr
     PIPE RIGHT x2 = ID ARROW e2 = expr
@@ -63,3 +65,8 @@ expr_atom:
   | x = ID                            { Var x }
   | LPAREN e1 = expr COMMA e2 = expr RPAREN { Pair (e1, e2) }
   | LPAREN e = expr RPAREN                  { e }
+
+
+typ:
+  | TINT                              { TInt }
+  | TBOOL                             { TBool }

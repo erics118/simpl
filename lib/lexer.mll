@@ -12,6 +12,7 @@ rule read =
   parse
   | white     { read lexbuf }
   | "let"     { LET }
+  | ":"       { COLON }
   | "in"      { IN }
   | "if"      { IF }
   | "then"    { THEN }
@@ -27,8 +28,10 @@ rule read =
   | "Right"   { RIGHT }
   | "match"   { MATCH }
   | "with"    { WITH }
+  | "int"     { TINT }
+  | "bool"    { TBOOL }
   | ","       { COMMA }
-  | "|"       { PIPE }  
+  | "|"       { PIPE }
   | id        { ID (Lexing.lexeme lexbuf) }
   | "="       { EQ }
   | "<>"      { NEQ }

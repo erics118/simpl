@@ -21,10 +21,10 @@ let rec eval env expr =
   match expr with
   | Int v -> Ok (VInt v)
   | Bool v -> Ok (VBool v)
-  | Fun (f, e) -> Ok (VFun (f, e, env))
+  | Fun (f, t, e) -> Ok (VFun (f, e, env))
   | Var x -> eval_var env x
   | Binop (bop, e1, e2) -> eval_bop env bop e1 e2
-  | Let (x, e1, e2) -> eval_let env x e1 e2
+  | Let (x, t, e1, e2) -> eval_let env x t e1 e2
   | If (e1, e2, e3) -> eval_if env e1 e2 e3
   | App (e1, e2) -> eval_app env e1 e2
   | Pair (e1, e2) ->
@@ -64,7 +64,7 @@ let rec eval env expr =
 and eval_var env x =
   try Ok (Env.find x env) with Not_found -> Error "unbound var"
 
-and eval_let env x e1 e2 =
+and eval_let env x t e1 e2 =
   let* v1 = eval env e1 in
   let env = Env.add x v1 env in
   eval env e2
