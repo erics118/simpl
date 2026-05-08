@@ -98,30 +98,29 @@ let typecheck_tests =
          tt_ok "add" TInt (Binop (Add, Int 1, Int 2));
          tt_ok "sub" TInt (Binop (Sub, Int 5, Int 2));
          tt_ok "mul" TInt (Binop (Mul, Int 2, Int 3));
-         tt_err "add bool" "operator and operand type mismatch"
+         tt_err "add bool" "cannot solve"
            (Binop (Add, Int 1, Bool true));
          (* binop: comparison returns bool *)
          tt_ok "lt" TBool (Binop (Lt, Int 1, Int 2));
          tt_ok "geq" TBool (Binop (Geq, Int 2, Int 1));
-         tt_err "lt bool" "operator and operand type mismatch"
+         tt_err "lt bool" "cannot solve"
            (Binop (Lt, Bool true, Bool false));
          (* binop: equality on ints and bools *)
          tt_ok "eq int" TBool (Binop (Eq, Int 1, Int 1));
          tt_ok "neq bool" TBool (Binop (Neq, Bool true, Bool false));
-         tt_err "eq mixed" "operator and operand type mismatch"
+         tt_err "eq mixed" "cannot solve"
            (Binop (Eq, Int 1, Bool true));
          (* let *)
          tt_ok "let" TInt (Let ("x", Some TInt, Int 1, Var "x"));
          tt_ok "let body type" TBool
            (Let ("x", Some TInt, Int 1, Binop (Lt, Var "x", Int 2)));
-         tt_err "let annotation mismatch" "invalid type annotation"
+         tt_err "let annotation mismatch" "cannot solve"
            (Let ("x", Some TInt, Bool true, Var "x"));
          (* if *)
          tt_ok "if" TInt (If (Bool true, Int 1, Int 2));
-         tt_err "if guard not bool" "condition must be bool"
+         tt_err "if guard not bool" "cannot solve"
            (If (Int 1, Int 2, Int 3));
-         tt_err "if branch mismatch"
-           "then and else branch in if different types"
+         tt_err "if branch mismatch" "cannot solve"
            (If (Bool true, Int 1, Bool false));
          (* fun and app *)
          tt_ok "fun"
@@ -129,9 +128,9 @@ let typecheck_tests =
            (Fun ("x", Some TInt, Binop (Add, Var "x", Int 1)));
          tt_ok "app" TInt
            (App (Fun ("x", Some TInt, Binop (Add, Var "x", Int 1)), Int 2));
-         tt_err "app arg mismatch" "argument type mismatch"
+         tt_err "app arg mismatch" "cannot solve"
            (App (Fun ("x", Some TInt, Var "x"), Bool true));
-         tt_err "app non-function" "lhs is not function" (App (Int 1, Int 2));
+         tt_err "app non-function" "cannot solve" (App (Int 1, Int 2));
          (* pair, fst, snd *)
          tt_ok "pair" (TPair (TInt, TBool)) (Pair (Int 1, Bool true));
          tt_ok "fst" TInt (Fst (Pair (Int 1, Bool true)));
@@ -142,8 +141,8 @@ let typecheck_tests =
                 Some (TPair (TInt, TInt)),
                 Pair (Int 1, Int 2),
                 Fst (Var "p") ));
-         tt_err "fst on non-pair" "called fst on a non-pair" (Fst (Int 1));
-         tt_err "snd on non-pair" "called snd on a non-pair" (Snd (Bool true));
+         tt_err "fst on non-pair" "cannot solve" (Fst (Int 1));
+         tt_err "snd on non-pair" "cannot solve" (Snd (Bool true));
          (* punted: sums *)
          tt_err "left punted" "sum types currently not typechecked"
            (Left (Int 1));
