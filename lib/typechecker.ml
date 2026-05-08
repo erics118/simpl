@@ -82,6 +82,7 @@ let rec unify (cs : constraints) : (subst, string) result =
       (* if l = r, just remove it *)
       | l, r when l = r -> unify cs
       (* pair *)
+      | TPair (a1, b1), TPair (a2, b2) -> unify ((a1, a2) :: (b1, b2) :: cs)
       (* one variable, subst it *)
       | TVar v, a | a, TVar v ->
           if occurs v a then Error "occurs check failed"
@@ -95,7 +96,6 @@ let rec unify (cs : constraints) : (subst, string) result =
             Ok ((v, a) :: rest)
       (* both functions, add two new constr *)
       | TFunc (p1, r1), TFunc (p2, r2) -> unify ((p1, p2) :: (r1, r2) :: cs)
-      | TPair (a1, b1), TPair (a2, b2) -> unify ((a1, a2) :: (a2, b2) :: cs)
       | _ -> Error "cannot solve"
       end
 
