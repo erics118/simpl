@@ -25,75 +25,158 @@ module StaticEnvironment : StaticEnvironment = struct
   let extend env x ty = (x, ty) :: env
 end
 
-(* open StaticEnvironment *)
+(* fresh type variables *)
+let fresh_counter = ref 0
+
+(* creates a fresh type variable *)
+let fresh () =
+  incr fresh_counter;
+  TVar ("'t" ^ string_of_int (Char.code 'a' + !fresh_counter))
+
+(* constraint is a pair of types we want equal *)
+type constraints = (typ * typ) list
+
+(* substitution map of type variable names to types *)
+type subst = (string * typ) list
 
 let ( let* ) = Result.bind
 
-let rec typeof (env : StaticEnvironment.t) : expr -> (typ, string) result =
-  function
-  | Int _ -> Ok TInt
-  | Bool _ -> Ok TBool
-  | Var x -> StaticEnvironment.lookup env x
-  | Fun (f, t, e) ->
-      let env = StaticEnvironment.extend env f t in
-      let* t_body = typeof env e in
-      Ok (TFunc (t, t_body))
-  | Binop (bop, e1, e2) -> begin
-      let* t1 = typeof env e1 in
-      let* t2 = typeof env e2 in
-      match (bop, t1, t2) with
-      (* arithmetic *)
-      | (Add | Sub | Mul), TInt, TInt -> Ok TInt
-      (* cmp between ints, or between bools *)
-      | (Lt | Leq | Gt | Geq), TInt, TInt -> Ok TBool
-      (* equality of ints returns bool *)
-      | (Eq | Neq), TInt, TInt -> Ok TBool
-      (* equality of bools returns bool *)
-      | (Eq | Neq), TBool, TBool -> Ok TBool
-      | _ -> Error "operator and operand type mismatch"
-    end
-  | Let (x, t, e1, e2) ->
-      let* t1 = typeof env e1 in
-      if t1 = t then
-        let env = StaticEnvironment.extend env x t in
-        typeof env e2
-      else Error "invalid type annotation"
-  | If (cond_e, then_e, else_e) ->
-      let* else_t = typeof env cond_e in
-      if else_t <> TBool then Error "condition must be bool"
-      else
-        let* t2 = typeof env then_e in
-        let* t3 = typeof env else_e in
-        if t2 = t3 then Ok t2
-        else Error "then and else branch in if different types"
-  | App (func, arg) -> begin
-      let* t_func = typeof env func in
-      let* t_arg = typeof env arg in
-      match t_func with
-      | TFunc (t_in, t_out) ->
-          if t_arg = t_in then Ok t_out else Error "argument type mismatch"
-      | _ -> Error "lhs is not function"
-    end
-  | Pair (le, re) ->
-      let* lt = typeof env le in
-      let* rt = typeof env re in
-      Ok (TPair (lt, rt))
-  | Fst e ->
-      let* t = typeof env e in
-      begin match t with
-      | TPair (l, _) -> Ok l
-      | _ -> Error "called fst on a non-pair"
+(* apply a substitution to a single type *)
+let rec apply_subst (s : subst) (t : typ) : typ =
+  match t with
+  | TInt -> TInt
+  | TBool -> TBool
+  | TFunc (param_t, ret_t) ->
+      let param_t = apply_subst s param_t in
+      let ret_t = apply_subst s ret_t in
+      TFunc (param_t, ret_t)
+  | TPair (a, b) ->
+      let a = apply_subst s a in
+      let b = apply_subst s b in
+      TPair (a, b)
+  | TVar x ->
+      (* apply substitutions for each elem in list *)
+      begin try apply_subst s (List.assoc x s) with Not_found -> TVar x
       end
-  | Snd e ->
-      let* t = typeof env e in
-      begin match t with
-      | TPair (_, r) -> Ok r
-      | _ -> Error "called snd on a non-pair"
-      end
-  | Left e -> Error "sum types currently not typechecked"
-  | Right e -> Error "sum types currently not typechecked"
-  | Match (e, x1, e1, x2, e2) -> Error "sum types currently not typechecked"
 
-(** [typecheck e] typechshecks [e] *)
+(* apply a substitution to every constraint *)
+let apply_subst_constraints (s : subst) (cs : constraints) : constraints =
+  (* apply subst to and rhs of each constraint *)
+  List.map (fun (a, b) -> (apply_subst s a, apply_subst s b)) cs
+
+(* occurs check: does TVar x appear inside t? *)
+let rec occurs (x : string) (t : typ) : bool =
+  match t with
+  | TInt -> false
+  | TBool -> false
+  | TFunc (param_t, ret_t) -> occurs x param_t || occurs x ret_t
+  | TPair (a, b) -> occurs x a || occurs x b
+  | TVar y -> x = y
+
+(* unify a constraint list into a substitution *)
+let rec unify (cs : constraints) : (subst, string) result =
+  match cs with
+  | [] -> Ok []
+  | c :: cs ->
+      begin match c with
+      (* if l = r, just remove it *)
+      | l, r when l = r -> unify cs
+      (* pair *)
+      (* one variable, subst it *)
+      | TVar v, a | a, TVar v ->
+          if occurs v a then Error "occurs check failed"
+          else
+            (* create the subst *)
+            let s = [ (v, a) ] in
+            (* apply the subst *)
+            let cs = apply_subst_constraints s cs in
+            (* recurse *)
+            let* rest = unify cs in
+            Ok ((v, a) :: rest)
+      (* both functions, add two new constr *)
+      | TFunc (p1, r1), TFunc (p2, r2) -> unify ((p1, p2) :: (r1, r2) :: cs)
+      | TPair (a1, b1), TPair (a2, b2) -> unify ((a1, a2) :: (a2, b2) :: cs)
+      | _ -> Error "cannot solve"
+      end
+
+let rec infer (env : StaticEnvironment.t) (e : expr) :
+    (typ * constraints, string) result =
+  match e with
+  | Int _ -> Ok (TInt, [])
+  | Bool _ -> Ok (TBool, [])
+  | Var x ->
+      let* t = StaticEnvironment.lookup env x in
+      Ok (t, [])
+  | Fun (x, t_opt, body) ->
+      (* if val exists, use it *)
+      let tx =
+        match t_opt with
+        | Some t -> t
+        | None -> fresh ()
+      in
+      (* extend the environment to add x *)
+      let env = StaticEnvironment.extend env x tx in
+      let* tb, c = infer env body in
+      Ok (TFunc (tx, tb), c)
+  | App (e1, e2) ->
+      let* t1, c1 = infer env e1 in
+      let* t2, c2 = infer env e2 in
+      let ret_t = fresh () in
+      (* t1 must be the function of t2 -> ret_t *)
+      Ok (ret_t, (t1, TFunc (t2, ret_t)) :: (c1 @ c2))
+  | If (e1, e2, e3) ->
+      let* t1, c1 = infer env e1 in
+      let* t2, c2 = infer env e2 in
+      let* t3, c3 = infer env e3 in
+      Ok (t2, (t1, TBool) :: (t2, t3) :: (c1 @ c2 @ c3))
+  | Binop (op, e1, e2) ->
+      let* t1, c1 = infer env e1 in
+      let* t2, c2 = infer env e2 in
+      begin match op with
+      (* ensure lhs, rhs both ints, returns int *)
+      | Add | Sub | Mul -> Ok (TInt, (t1, TInt) :: (t2, TInt) :: (c1 @ c2))
+      (* ensure lhs, rhs both ints, returns bool *)
+      | Lt | Leq | Gt | Geq -> Ok (TBool, (t1, TInt) :: (t2, TInt) :: (c1 @ c2))
+      (* ensure lhs, rhs same, returns bool *)
+      | Eq | Neq -> Ok (TBool, (t1, t2) :: (c1 @ c2))
+      end
+  | Let (x, t_opt, e1, e2) ->
+      let* t1, c1 = infer env e1 in
+      (* if x doesn't have a type annotation, add the extra constraint *)
+      let extra =
+        match t_opt with
+        | Some t -> [ (t1, t) ]
+        | None -> []
+      in
+      let env = StaticEnvironment.extend env x t1 in
+      (* infer e2 in the new environment *)
+      let* t2, c2 = infer env e2 in
+      Ok (t2, extra @ c1 @ c2)
+  | Pair (a, b) ->
+      let* ta, ca = infer env a in
+      let* tb, cb = infer env b in
+      Ok (TPair (ta, tb), ca @ cb)
+  | Fst e ->
+      let* t, c = infer env e in
+      (* make fresh variables for lhs, rhs of pair *)
+      let ta = fresh () and tb = fresh () in
+      (* ensure t = (ta, tb) *)
+      Ok (ta, (t, TPair (ta, tb)) :: c)
+  | Snd e ->
+      let* t, c = infer env e in
+      (* make fresh variables for lhs, rhs of pair *)
+      let ta = fresh () and tb = fresh () in
+      (* ensure t = (ta, tb) *)
+      Ok (tb, (t, TPair (ta, tb)) :: c)
+  | Left _ | Right _ | Match _ -> Error "sum types currently not typechecked"
+
+(** [typecheck e] typechecks [e] *)
 let typecheck (e : expr) : (typ, string) result =
-  typeof StaticEnvironment.empty e
+  (* reset fresh counter *)
+  fresh_counter := 0;
+  (* infer the only expr, e *)
+  let* t, cs = infer StaticEnvironment.empty e in
+  (* unify *)
+  let* s = unify cs in
+  (* apply the substitutions *)
+  Ok (apply_subst s t)
