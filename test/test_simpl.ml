@@ -38,21 +38,23 @@ let ast_tests =
          t_ok "lt true" (VBool true) (Binop (Lt, Int 1, Int 2));
          t_ok "if true" (VInt 1) (If (Bool true, Int 1, Int 2));
          t_ok "if false" (VInt 2) (If (Bool false, Int 1, Int 2));
-         t_ok "let" (VInt 3) (Let ("x", TInt, Int 3, Var "x"));
+         t_ok "let" (VInt 3) (Let ("x", Some TInt, Int 3, Var "x"));
          t_ok "let shadow" (VInt 2)
-           (Let ("x", TInt, Int 1, Let ("x", TInt, Int 2, Var "x")));
+           (Let ("x", Some TInt, Int 1, Let ("x", Some TInt, Int 2, Var "x")));
          t_ok "fun is value"
            (VFun ("x", Var "x", empty_env))
-           (Fun ("x", TInt, Var "x"));
-         t_ok "app identity" (VInt 5) (App (Fun ("x", TInt, Var "x"), Int 5));
+           (Fun ("x", Some TInt, Var "x"));
+         t_ok "app identity" (VInt 5)
+           (App (Fun ("x", Some TInt, Var "x"), Int 5));
          t_ok "app add" (VInt 7)
-           (App (Fun ("x", TInt, Binop (Add, Var "x", Int 2)), Int 5));
+           (App (Fun ("x", Some TInt, Binop (Add, Var "x", Int 2)), Int 5));
          t_ok "closure captures env" (VInt 3)
            (Let
               ( "x",
-                TInt,
+                Some TInt,
                 Int 1,
-                App (Fun ("y", TInt, Binop (Add, Var "x", Var "y")), Int 2) ));
+                App (Fun ("y", Some TInt, Binop (Add, Var "x", Var "y")), Int 2)
+              ));
          t_err "unbound var" "unbound var" (Var "x");
          t_err "type error in binop" "Operator and operand type mismatch"
            (Binop (Add, Int 1, Bool true));
@@ -109,11 +111,11 @@ let typecheck_tests =
          tt_err "eq mixed" "operator and operand type mismatch"
            (Binop (Eq, Int 1, Bool true));
          (* let *)
-         tt_ok "let" TInt (Let ("x", TInt, Int 1, Var "x"));
+         tt_ok "let" TInt (Let ("x", Some TInt, Int 1, Var "x"));
          tt_ok "let body type" TBool
-           (Let ("x", TInt, Int 1, Binop (Lt, Var "x", Int 2)));
+           (Let ("x", Some TInt, Int 1, Binop (Lt, Var "x", Int 2)));
          tt_err "let annotation mismatch" "invalid type annotation"
-           (Let ("x", TInt, Bool true, Var "x"));
+           (Let ("x", Some TInt, Bool true, Var "x"));
          (* if *)
          tt_ok "if" TInt (If (Bool true, Int 1, Int 2));
          tt_err "if guard not bool" "condition must be bool"
@@ -124,18 +126,22 @@ let typecheck_tests =
          (* fun and app *)
          tt_ok "fun"
            (TFunc (TInt, TInt))
-           (Fun ("x", TInt, Binop (Add, Var "x", Int 1)));
+           (Fun ("x", Some TInt, Binop (Add, Var "x", Int 1)));
          tt_ok "app" TInt
-           (App (Fun ("x", TInt, Binop (Add, Var "x", Int 1)), Int 2));
+           (App (Fun ("x", Some TInt, Binop (Add, Var "x", Int 1)), Int 2));
          tt_err "app arg mismatch" "argument type mismatch"
-           (App (Fun ("x", TInt, Var "x"), Bool true));
+           (App (Fun ("x", Some TInt, Var "x"), Bool true));
          tt_err "app non-function" "lhs is not function" (App (Int 1, Int 2));
          (* pair, fst, snd *)
          tt_ok "pair" (TPair (TInt, TBool)) (Pair (Int 1, Bool true));
          tt_ok "fst" TInt (Fst (Pair (Int 1, Bool true)));
          tt_ok "snd" TBool (Snd (Pair (Int 1, Bool true)));
          tt_ok "fst on let-bound pair" TInt
-           (Let ("p", TPair (TInt, TInt), Pair (Int 1, Int 2), Fst (Var "p")));
+           (Let
+              ( "p",
+                Some (TPair (TInt, TInt)),
+                Pair (Int 1, Int 2),
+                Fst (Var "p") ));
          tt_err "fst on non-pair" "called fst on a non-pair" (Fst (Int 1));
          tt_err "snd on non-pair" "called snd on a non-pair" (Snd (Bool true));
          (* punted: sums *)

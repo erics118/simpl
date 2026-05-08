@@ -24,9 +24,11 @@ prog:
   | e = expr EOF { e }
 
 expr:
-  | FUN x = ID COLON t = typ ARROW e = expr            { Fun (x, t, e) }
+  | FUN x = ID COLON t = typ ARROW e = expr            { Fun (x, Some t, e) }
+  | FUN x = ID ARROW e = expr                          { Fun (x, None, e) }
   | IF e1 = expr THEN e2 = expr ELSE e3 = expr         { If (e1, e2, e3) }
-  | LET x = ID COLON t = typ EQ e1 = expr IN e2 = expr { Let (x, t, e1, e2) }
+  | LET x = ID COLON t = typ EQ e1 = expr IN e2 = expr { Let (x, Some t, e1, e2) }
+  | LET x = ID EQ e1 = expr IN e2 = expr               { Let (x, None, e1, e2) }
   | MATCH e = expr WITH
     PIPE LEFT x1 = ID ARROW e1 = expr
     PIPE RIGHT x2 = ID ARROW e2 = expr
